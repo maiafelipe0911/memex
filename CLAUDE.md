@@ -16,21 +16,28 @@ Personal knowledge companion. Users add books and Kindle highlights; the system 
 
 | File | Purpose |
 |------|---------|
-| `src/lib/schema.ts` | Drizzle schema — `books` and `highlights` tables |
+| `src/lib/schema.ts` | Drizzle schema — `books`, `highlights`, `users`, `accounts`, `sessions`, `verificationTokens` tables |
 | `src/lib/db.ts` | Drizzle client via Neon serverless driver |
+| `src/lib/auth.ts` | Auth.js v5 config — GitHub + Google OAuth, Drizzle adapter |
 | `drizzle.config.ts` | Migration config, loads `.env.local` |
+| `src/proxy.ts` | Auth guard — redirects unauthenticated requests to `/login` |
 | `scripts/ingest.ts` | Kindle `My Clippings.txt` parser, run with `npm run ingest` |
 | `scripts/embed.ts` | Voyage AI embedding script — generates `vector(1536)` for all unembedded highlights, run with `npm run embed` |
-| `src/app/api/books/route.ts` | `GET /api/books` — returns all books as JSON |
-| `src/app/api/highlights/route.ts` | `GET /api/highlights` — returns all highlights with book info |
-| `src/app/api/highlights/[id]/connections/route.ts` | `GET /api/highlights/:id/connections` — top 10 cross-book similar highlights |
+| `src/app/api/auth/[...nextauth]/route.ts` | Auth.js catch-all route handler |
+| `src/app/api/books/route.ts` | `GET /api/books` — returns user's books (requires auth) |
+| `src/app/api/highlights/route.ts` | `GET /api/highlights` — returns user's highlights (requires auth) |
+| `src/app/api/highlights/[id]/connections/route.ts` | `GET /api/highlights/:id/connections` — top 10 cross-book similar highlights (requires auth) |
+| `src/app/login/page.tsx` | Login page with GitHub + Google OAuth buttons |
+| `src/components/NavBar.tsx` | Server component nav bar showing user info + sign out |
 
 ## Database
 
 - Connection string is in `.env.local` (gitignored)
-- `VOYAGE_API_KEY` is also in `.env.local` — required by `scripts/embed.ts`
+- `VOYAGE_API_KEY` is in `.env.local` — required by `scripts/embed.ts`
+- `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — required by Auth.js
 - Schema changes: edit `src/lib/schema.ts` → `npm run db:generate` → `npm run db:push`
 - `highlights.embedding` is `vector(1536)`, nullable — populated in Phase 2
+- Auth tables managed by Auth.js via Drizzle adapter
 
 ## Useful scripts
 
@@ -49,3 +56,4 @@ npm run embed         # generate embeddings for all highlights (idempotent)
 - **Phase 2** (done): Generate embeddings via Voyage AI (`voyage-large-2`), store in `highlights.embedding`
 - **Phase 3** (done): Surface connections between highlights using vector similarity search
 - **Phase 4** (done): UI — three-panel layout (Books | Highlights | Connections) in `src/app/page.tsx`
+- **Phase 5.1** (done): Auth & multi-user — GitHub + Google OAuth, per-user data isolation, protected routes via `proxy.ts`

@@ -14,10 +14,12 @@
     "embed": "tsx scripts/embed.ts"
   },
   "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.1",
     "@neondatabase/serverless": "^1.0.2",
     "dotenv": "^17.4.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.2",
+    "next-auth": "^5.0.0-beta.30",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "voyageai": "^0.2.1"

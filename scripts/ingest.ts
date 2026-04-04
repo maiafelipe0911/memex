@@ -4,7 +4,7 @@ import { readFileSync } from "fs";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { eq } from "drizzle-orm";
-import { books, highlights } from "../src/lib/schema";
+import { books, highlights, users } from "../src/lib/schema";
 
 // ---------------------------------------------------------------------------
 // Kindle "My Clippings.txt" parser
@@ -102,6 +102,15 @@ async function main() {
 
   console.log(`Found ${parsed.length} highlights across ${byBook.size} book(s).\n`);
 
+  // Resolve the owner — use the first user in the DB (seed user)
+  const [owner] = await db.select({ id: users.id }).from(users).limit(1);
+  if (!owner) {
+    console.error("No user found. Run the migrate-existing-data script first, or sign in via the app.");
+    process.exit(1);
+  }
+  const userId = owner.id;
+  console.log(`Assigning books to user ${userId}\n`);
+
   for (const [key, items] of byBook) {
     const { title, author } = items[0];
 
@@ -119,7 +128,7 @@ async function main() {
     } else {
       const [newBook] = await db
         .insert(books)
-        .values({ title, author })
+        .values({ title, author, userId })
         .returning();
       bookId = newBook.id;
       console.log(`Created book: "${title}" by ${author} (id=${bookId})`);

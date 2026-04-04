@@ -1,8 +1,14 @@
 import { db } from "@/lib/db";
 import { highlights, books } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { auth } from "@/lib/auth";
 
 export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const rows = await db
     .select({
       id: highlights.id,
@@ -14,6 +20,7 @@ export async function GET() {
     })
     .from(highlights)
     .innerJoin(books, eq(highlights.bookId, books.id))
+    .where(eq(books.userId, session.user.id))
     .orderBy(books.title, highlights.id);
 
   return Response.json(rows);

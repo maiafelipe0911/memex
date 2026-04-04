@@ -52,7 +52,7 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
+    <div className="flex flex-1 bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
 
       {/* Panel 1: Books */}
       <div className="w-52 border-r border-zinc-800 flex flex-col flex-shrink-0">
