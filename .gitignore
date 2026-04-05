@@ -34,3 +34,9 @@ yarn-error.log*
 # screenshots / local test files
 image.png
 test_clippings.txt
+
+#private files
+explanation.md 
+explanation-phase-5-1.md
+memex_roadmap.docx
+plan.md 

@@ -19,6 +19,7 @@ export const users = pgTable("user", {
   email: text("email").unique(),
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
+  lastDigestAt: timestamp("last_digest_at"),
 });
 
 export const accounts = pgTable(
@@ -86,6 +87,8 @@ export const highlights = pgTable("highlights", {
     .notNull(),
   content: text("content").notNull(),
   page: text("page"),
+  type: text("type").notNull().default("highlight"),
+  source: text("source").notNull().default("kindle"),
   embedding: vector("embedding", { dimensions: 1536 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

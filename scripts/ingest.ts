@@ -5,74 +5,7 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { eq } from "drizzle-orm";
 import { books, highlights, users } from "../src/lib/schema";
-
-// ---------------------------------------------------------------------------
-// Kindle "My Clippings.txt" parser
-// ---------------------------------------------------------------------------
-// Each clipping block looks like:
-//
-//   Book Title (Author Name)
-//   - Your Highlight on page 42 | location 600-612 | Added on Monday, January 1, 2024 ...
-//
-//   The actual highlighted text goes here.
-//   ==========
-//
-// Blocks are separated by "==========\n".
-
-interface ParsedHighlight {
-  title: string;
-  author: string;
-  page: string | null;
-  content: string;
-}
-
-function parseClippings(raw: string): ParsedHighlight[] {
-  const blocks = raw.split("==========").map((b) => b.trim()).filter(Boolean);
-  const results: ParsedHighlight[] = [];
-
-  for (const block of blocks) {
-    const lines = block.split("\n").map((l) => l.trim());
-    if (lines.length < 3) continue;
-
-    // Line 0: "Book Title (Author Name)"
-    const titleLine = lines[0];
-    const authorMatch = titleLine.match(/\(([^)]+)\)\s*$/);
-    const author = authorMatch ? authorMatch[1].trim() : "Unknown";
-    const title = authorMatch
-      ? titleLine.slice(0, authorMatch.index).trim()
-      : titleLine.trim();
-
-    // Line 1: metadata — try to extract page or location
-    const metaLine = lines[1];
-    const pageMatch = metaLine.match(/page\s+(\d+)/i);
-    const locMatch = metaLine.match(/location\s+([\d-]+)/i);
-    const page = pageMatch
-      ? `p. ${pageMatch[1]}`
-      : locMatch
-        ? `loc. ${locMatch[1]}`
-        : null;
-
-    // Skip bookmarks and notes — we only want highlights
-    if (!metaLine.toLowerCase().includes("highlight")) continue;
-
-    // Lines 2+: the highlight text (skip the empty line after metadata)
-    const content = lines
-      .slice(2)
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-
-    if (!content) continue;
-
-    results.push({ title, author, page, content });
-  }
-
-  return results;
-}
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+import { parseKindleClippings } from "../src/lib/ingest";
 
 async function main() {
   const filePath = process.argv[2];
@@ -82,7 +15,7 @@ async function main() {
   }
 
   const raw = readFileSync(filePath, "utf-8");
-  const parsed = parseClippings(raw);
+  const parsed = parseKindleClippings(raw);
 
   if (parsed.length === 0) {
     console.log("No highlights found in the file.");
@@ -93,7 +26,7 @@ async function main() {
   const db = drizzle(sql);
 
   // Group highlights by book (title + author)
-  const byBook = new Map<string, ParsedHighlight[]>();
+  const byBook = new Map<string, typeof parsed>();
   for (const h of parsed) {
     const key = `${h.title}|||${h.author}`;
     if (!byBook.has(key)) byBook.set(key, []);
@@ -105,16 +38,17 @@ async function main() {
   // Resolve the owner — use the first user in the DB (seed user)
   const [owner] = await db.select({ id: users.id }).from(users).limit(1);
   if (!owner) {
-    console.error("No user found. Run the migrate-existing-data script first, or sign in via the app.");
+    console.error(
+      "No user found. Run the migrate-existing-data script first, or sign in via the app."
+    );
     process.exit(1);
   }
   const userId = owner.id;
   console.log(`Assigning books to user ${userId}\n`);
 
-  for (const [key, items] of byBook) {
+  for (const [, items] of byBook) {
     const { title, author } = items[0];
 
-    // Check if book already exists
     const existing = await db
       .select()
       .from(books)
@@ -134,7 +68,6 @@ async function main() {
       console.log(`Created book: "${title}" by ${author} (id=${bookId})`);
     }
 
-    // Insert highlights
     const rows = items.map((h) => ({
       bookId,
       content: h.content,
@@ -145,7 +78,7 @@ async function main() {
     console.log(`  → Inserted ${rows.length} highlight(s)`);
   }
 
-  console.log("\nDone!");
+  console.log("\nDone! Run `npm run embed` to generate embeddings.");
 }
 
 main().catch((err) => {

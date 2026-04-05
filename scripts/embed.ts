@@ -4,7 +4,7 @@ config({ path: ".env.local" });
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { isNull, eq } from "drizzle-orm";
-import { VoyageAIClient } from "voyageai";
+import { voyageEmbed } from "../src/lib/voyage";
 import { highlights } from "../src/lib/schema";
 
 // ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ async function main() {
   const sql = neon(process.env.DATABASE_URL);
   const db = drizzle(sql);
 
-  const voyage = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY });
+  const apiKey = process.env.VOYAGE_API_KEY;
 
   // Fetch all highlights that still need embeddings
   const pending = await db
@@ -66,22 +66,11 @@ async function main() {
     );
 
     try {
-      const result = await voyage.embed({
-        input: batch.map((h) => h.content),
-        model: "voyage-large-2",
-      });
-
-      const embeddings = result.data;
-      if (!embeddings) {
-        console.error(
-          `  Batch ${batchNum}: response contained no data, skipping.`
-        );
-        continue;
-      }
+      const embeddings = await voyageEmbed(batch.map((h) => h.content), apiKey);
 
       for (let j = 0; j < batch.length; j++) {
-        const item = embeddings[j];
-        if (!item?.embedding) {
+        const embedding = embeddings[j];
+        if (!embedding) {
           console.error(
             `  Highlight id=${batch[j].id}: no embedding returned, skipping.`
           );
@@ -91,7 +80,7 @@ async function main() {
         try {
           await db
             .update(highlights)
-            .set({ embedding: item.embedding })
+            .set({ embedding })
             .where(eq(highlights.id, batch[j].id));
           done++;
         } catch (updateErr) {

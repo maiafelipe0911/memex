@@ -4,6 +4,10 @@
 
 Personal knowledge companion. Users add books and Kindle highlights; the system surfaces unexpected connections between highlights and generates thinking prompts.
 
+## Important rule:
+
+Whenever making changes to the code, remember to update this file (@CLAUDE.md) and expaling the changes in the @explanation.md
+
 ## Stack
 
 - **Framework**: Next.js 16 (App Router) — read `node_modules/next/dist/docs/` before touching routing or caching
@@ -19,24 +23,41 @@ Personal knowledge companion. Users add books and Kindle highlights; the system 
 | `src/lib/schema.ts` | Drizzle schema — `books`, `highlights`, `users`, `accounts`, `sessions`, `verificationTokens` tables |
 | `src/lib/db.ts` | Drizzle client via Neon serverless driver |
 | `src/lib/auth.ts` | Auth.js v5 config — GitHub + Google OAuth, Drizzle adapter |
+| `src/lib/ingest.ts` | Shared parsing functions — `parseKindleClippings`, `parsePdfText`, `parseManualText` |
+| `src/lib/voyage.ts` | `voyageEmbed(texts, apiKey)` — direct HTTP wrapper for Voyage AI embeddings API (no SDK) |
+| `src/lib/embed.ts` | `embedHighlightsByIds(ids)` — embeds specific highlights via Voyage AI (used by API routes) |
+| `src/lib/rag.ts` | RAG utilities — `findRelevantHighlights`, `streamChatAnswer` via Claude |
+| `src/lib/digest.ts` | Weekly digest builder (`buildDigestPairs`) and sender (`sendDigest`) via Resend |
 | `drizzle.config.ts` | Migration config, loads `.env.local` |
 | `src/proxy.ts` | Auth guard — redirects unauthenticated requests to `/login` |
-| `scripts/ingest.ts` | Kindle `My Clippings.txt` parser, run with `npm run ingest` |
-| `scripts/embed.ts` | Voyage AI embedding script — generates `vector(1536)` for all unembedded highlights, run with `npm run embed` |
+| `scripts/ingest.ts` | CLI Kindle importer — wraps `parseKindleClippings` from lib, run with `npm run ingest` |
+| `scripts/embed.ts` | CLI embedding script — generates `vector(1536)` for all unembedded highlights, run with `npm run embed` |
 | `src/app/api/auth/[...nextauth]/route.ts` | Auth.js catch-all route handler |
 | `src/app/api/books/route.ts` | `GET /api/books` — returns user's books (requires auth) |
 | `src/app/api/highlights/route.ts` | `GET /api/highlights` — returns user's highlights (requires auth) |
 | `src/app/api/highlights/[id]/connections/route.ts` | `GET /api/highlights/:id/connections` — top 10 cross-book similar highlights (requires auth) |
+| `src/app/api/ingest/route.ts` | `POST /api/ingest` — web ingestion endpoint (kindle/pdf/manual modes, auto-embeds) |
+| `src/app/api/chat/route.ts` | `POST /api/chat` — streaming RAG chat endpoint |
+| `src/app/api/cron/digest/route.ts` | `POST /api/cron/digest` — cron-triggered weekly digest, requires `DIGEST_CRON_SECRET` |
 | `src/app/login/page.tsx` | Login page with GitHub + Google OAuth buttons |
-| `src/components/NavBar.tsx` | Server component nav bar showing user info + sign out |
+| `src/app/add/page.tsx` | Add Highlights page — three-tab UI (Kindle / PDF / Manual) |
+| `src/app/chat/page.tsx` | Chat page — streaming RAG conversation UI |
+| `src/components/NavBar.tsx` | Server component nav bar with links to Library, Add, Chat |
+| `vercel.json` | Vercel Cron schedule — `POST /api/cron/digest` every Monday 9 AM UTC |
 
 ## Database
 
 - Connection string is in `.env.local` (gitignored)
-- `VOYAGE_API_KEY` is in `.env.local` — required by `scripts/embed.ts`
+- `VOYAGE_API_KEY` is in `.env.local` — required by `scripts/embed.ts` and `src/lib/embed.ts`
+- `ANTHROPIC_API_KEY` is in `.env.local` — required by `src/lib/rag.ts` (Chat/RAG)
+- `RESEND_API_KEY` is in `.env.local` — required by `src/lib/digest.ts` (weekly digest)
+- `DIGEST_CRON_SECRET` is in `.env.local` — shared secret to authenticate `POST /api/cron/digest`
 - `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — required by Auth.js
 - Schema changes: edit `src/lib/schema.ts` → `npm run db:generate` → `npm run db:push`
-- `highlights.embedding` is `vector(1536)`, nullable — populated in Phase 2
+- `highlights.embedding` is `vector(1536)`, nullable — populated by Phase 2 or the ingest API route
+- `highlights.type` is `text`, default `highlight` — values: `highlight`, `note`
+- `highlights.source` is `text`, default `kindle` — values: `kindle`, `pdf`, `manual`
+- `users.last_digest_at` is `timestamp`, nullable — set after each digest send
 - Auth tables managed by Auth.js via Drizzle adapter
 
 ## Useful scripts
@@ -57,3 +78,6 @@ npm run embed         # generate embeddings for all highlights (idempotent)
 - **Phase 3** (done): Surface connections between highlights using vector similarity search
 - **Phase 4** (done): UI — three-panel layout (Books | Highlights | Connections) in `src/app/page.tsx`
 - **Phase 5.1** (done): Auth & multi-user — GitHub + Google OAuth, per-user data isolation, protected routes via `proxy.ts`
+- **Phase 5.2** (done): Better ingestion — `POST /api/ingest` (Kindle/PDF/manual), `app/add/page.tsx`, shared `lib/ingest.ts` + `lib/embed.ts`
+- **Phase 5.3** (done): Chat/RAG — `POST /api/chat` streaming endpoint, `app/chat/page.tsx`, `lib/rag.ts` (Voyage + Claude)
+- **Phase 5.4** (done): Scheduling — `POST /api/cron/digest`, `lib/digest.ts`, `vercel.json` Monday 9 AM cron, Resend email

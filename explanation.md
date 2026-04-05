@@ -391,3 +391,30 @@ npm run dev
 #   http://localhost:3000/api/highlights
 #   http://localhost:3000/api/highlights/1/connections
 ```
+
+---
+
+## Bug Fix — `voyageai` SDK replaced with direct HTTP calls
+
+The `voyageai` npm package (v0.2.1) has a broken ESM build: its `extended/index.mjs`
+uses bare directory imports (`export * from "../api"`) which are not valid in Node.js
+ESM. This caused the production build to fail with 5 "Module not found" errors
+(`../api`, `../errors`, `../local`, `../Client`, `./ExtendedClient`) whenever any
+route imported `voyageai`.
+
+**Fix**: The SDK was replaced with a minimal direct HTTP wrapper (`src/lib/voyage.ts`)
+that calls the Voyage AI REST endpoint directly:
+
+```
+POST https://api.voyageai.com/v1/embeddings
+Authorization: Bearer {VOYAGE_API_KEY}
+{ "model": "voyage-large-2", "input": ["text1", ...] }
+```
+
+`src/lib/embed.ts`, `src/lib/rag.ts`, and `scripts/embed.ts` now import
+`voyageEmbed()` from `src/lib/voyage.ts` instead of `VoyageAIClient` from `voyageai`.
+The `voyageai` package remains installed (it's in `package.json`) but is no longer
+imported anywhere in the application.
+
+The `voyageEmbed(texts, apiKey)` function returns `number[][]` (one vector per input),
+matching the previous `result.data[i].embedding` access pattern.

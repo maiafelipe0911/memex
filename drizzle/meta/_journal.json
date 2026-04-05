@@ -15,6 +15,13 @@
       "when": 1775315895627,
       "tag": "0001_confused_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775342431210,
+      "tag": "0002_round_dust",
+      "breakpoints": true
     }
   ]
 }
