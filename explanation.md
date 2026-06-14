@@ -418,3 +418,63 @@ imported anywhere in the application.
 
 The `voyageEmbed(texts, apiKey)` function returns `number[][]` (one vector per input),
 matching the previous `result.data[i].embedding` access pattern.
+
+---
+
+## Disabling login for local dev — `AUTH_DISABLED` and `.env.example`
+
+The app isn't deployed yet, so requiring GitHub/Google OAuth on every page is
+just friction during local development. Rather than ripping out the auth
+system, a single env flag now bypasses it while leaving everything else intact.
+
+### `.env.example`
+
+A new `.env.example` documents every environment variable the app reads
+(`DATABASE_URL`, Auth.js OAuth credentials, `VOYAGE_API_KEY`,
+`ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `DIGEST_CRON_SECRET`, and the new
+`AUTH_DISABLED`). Copy it to `.env.local` and fill in real values to run the
+project.
+
+### `src/lib/dev-auth.ts` — the bypass
+
+```ts
+export const AUTH_DISABLED = process.env.AUTH_DISABLED === "true";
+export const DEV_USER_ID = "00000000-0000-0000-0000-000000000001";
+
+export async function getCurrentUserId(): Promise<string | null> {
+  if (AUTH_DISABLED) {
+    await ensureDevUser(); // upserts a "Local Dev" row into `users`
+    return DEV_USER_ID;
+  }
+  const session = await auth();
+  return session?.user?.id ?? null;
+}
+```
+
+Every `books`/`highlights` row has a `NOT NULL` foreign key to `users.id`, so
+even in bypass mode a real (fixed) user row is needed — `ensureDevUser()`
+creates one on first use and is a no-op afterwards.
+
+### What changed
+
+- `src/app/api/books/route.ts`, `highlights/route.ts`,
+  `highlights/[id]/connections/route.ts`, `ingest/route.ts`, and `chat/route.ts`
+  now call `getCurrentUserId()` instead of `auth()` directly. Behavior is
+  unchanged when `AUTH_DISABLED` is unset/`false`.
+- `src/components/NavBar.tsx` skips the session check and renders the nav
+  (Memex/Add/Chat links) without the avatar/sign-out controls when disabled.
+- `src/app/login/page.tsx` immediately redirects to `/` when disabled.
+- `src/proxy.ts` — **important**: in this Next.js version, a `proxy.ts`
+  exporting `proxy` + a `matcher` config IS the middleware (this version
+  replaces the old `middleware.ts` convention — see `AGENTS.md`). It was
+  actively redirecting every request without a session cookie to `/login`.
+  Combined with the login page now redirecting back to `/`, this created an
+  infinite redirect loop. Fixed by returning `NextResponse.next()`
+  immediately when `AUTH_DISABLED=true`.
+
+### Re-enabling real auth
+
+Set `AUTH_DISABLED=false` (or remove it) from `.env.local` and configure the
+Auth.js OAuth env vars — every route reverts to requiring a real session,
+`/login` shows the GitHub/Google buttons again, and `src/proxy.ts` resumes
+redirecting unauthenticated requests to `/login`.

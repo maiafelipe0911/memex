@@ -23,19 +23,20 @@ Whenever making changes to the code, remember to update this file (@CLAUDE.md) a
 | `src/lib/schema.ts` | Drizzle schema — `books`, `highlights`, `users`, `accounts`, `sessions`, `verificationTokens` tables |
 | `src/lib/db.ts` | Drizzle client via Neon serverless driver |
 | `src/lib/auth.ts` | Auth.js v5 config — GitHub + Google OAuth, Drizzle adapter |
+| `src/lib/dev-auth.ts` | `getCurrentUserId()` — session user id, or a fixed local dev user id when `AUTH_DISABLED=true` |
 | `src/lib/ingest.ts` | Shared parsing functions — `parseKindleClippings`, `parsePdfText`, `parseManualText` |
 | `src/lib/voyage.ts` | `voyageEmbed(texts, apiKey)` — direct HTTP wrapper for Voyage AI embeddings API (no SDK) |
 | `src/lib/embed.ts` | `embedHighlightsByIds(ids)` — embeds specific highlights via Voyage AI (used by API routes) |
 | `src/lib/rag.ts` | RAG utilities — `findRelevantHighlights`, `streamChatAnswer` via Claude |
 | `src/lib/digest.ts` | Weekly digest builder (`buildDigestPairs`) and sender (`sendDigest`) via Resend |
 | `drizzle.config.ts` | Migration config, loads `.env.local` |
-| `src/proxy.ts` | Auth guard — redirects unauthenticated requests to `/login` |
+| `src/proxy.ts` | Middleware (this Next.js version uses `proxy.ts`, not `middleware.ts`) — redirects unauthenticated requests to `/login`, bypassed when `AUTH_DISABLED=true` |
 | `scripts/ingest.ts` | CLI Kindle importer — wraps `parseKindleClippings` from lib, run with `npm run ingest` |
 | `scripts/embed.ts` | CLI embedding script — generates `vector(1536)` for all unembedded highlights, run with `npm run embed` |
 | `src/app/api/auth/[...nextauth]/route.ts` | Auth.js catch-all route handler |
-| `src/app/api/books/route.ts` | `GET /api/books` — returns user's books (requires auth) |
-| `src/app/api/highlights/route.ts` | `GET /api/highlights` — returns user's highlights (requires auth) |
-| `src/app/api/highlights/[id]/connections/route.ts` | `GET /api/highlights/:id/connections` — top 10 cross-book similar highlights (requires auth) |
+| `src/app/api/books/route.ts` | `GET /api/books` — returns user's books (requires auth, unless `AUTH_DISABLED=true`) |
+| `src/app/api/highlights/route.ts` | `GET /api/highlights` — returns user's highlights (requires auth, unless `AUTH_DISABLED=true`) |
+| `src/app/api/highlights/[id]/connections/route.ts` | `GET /api/highlights/:id/connections` — top 10 cross-book similar highlights (requires auth, unless `AUTH_DISABLED=true`) |
 | `src/app/api/ingest/route.ts` | `POST /api/ingest` — web ingestion endpoint (kindle/pdf/manual modes, auto-embeds) |
 | `src/app/api/chat/route.ts` | `POST /api/chat` — streaming RAG chat endpoint |
 | `src/app/api/cron/digest/route.ts` | `POST /api/cron/digest` — cron-triggered weekly digest, requires `DIGEST_CRON_SECRET` |
@@ -44,6 +45,7 @@ Whenever making changes to the code, remember to update this file (@CLAUDE.md) a
 | `src/app/chat/page.tsx` | Chat page — streaming RAG conversation UI |
 | `src/components/NavBar.tsx` | Server component nav bar with links to Library, Add, Chat |
 | `vercel.json` | Vercel Cron schedule — `POST /api/cron/digest` every Monday 9 AM UTC |
+| `.env.example` | Template listing all required/optional env vars |
 
 ## Database
 
@@ -52,7 +54,8 @@ Whenever making changes to the code, remember to update this file (@CLAUDE.md) a
 - `ANTHROPIC_API_KEY` is in `.env.local` — required by `src/lib/rag.ts` (Chat/RAG)
 - `RESEND_API_KEY` is in `.env.local` — required by `src/lib/digest.ts` (weekly digest)
 - `DIGEST_CRON_SECRET` is in `.env.local` — shared secret to authenticate `POST /api/cron/digest`
-- `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — required by Auth.js
+- `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — required by Auth.js (not needed while `AUTH_DISABLED=true`)
+- `AUTH_DISABLED` — set to `"true"` in `.env.local` to bypass login entirely and use a fixed local dev user (`src/lib/dev-auth.ts`). Currently enabled since the app isn't deployed yet.
 - Schema changes: edit `src/lib/schema.ts` → `npm run db:generate` → `npm run db:push`
 - `highlights.embedding` is `vector(1536)`, nullable — populated by Phase 2 or the ingest API route
 - `highlights.type` is `text`, default `highlight` — values: `highlight`, `note`
