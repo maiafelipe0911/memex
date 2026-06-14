@@ -10,7 +10,7 @@ Whenever making changes to the code, remember to update this file (@CLAUDE.md) a
 
 ## Stack
 
-- **Framework**: Next.js 16 (App Router) — read `node_modules/next/dist/docs/` before touching routing or caching
+- **Framework**: Next.js 16.2.9 (App Router) — read `node_modules/next/dist/docs/` before touching routing or caching
 - **Database**: Neon Postgres (serverless) with pgvector extension
 - **ORM**: Drizzle ORM — schema in `src/lib/schema.ts`, client in `src/lib/db.ts`
 - **Styling**: Tailwind CSS v4
@@ -47,9 +47,21 @@ Whenever making changes to the code, remember to update this file (@CLAUDE.md) a
 | `vercel.json` | Vercel Cron schedule — `POST /api/cron/digest` every Monday 9 AM UTC |
 | `.env.example` | Template listing all required/optional env vars |
 
+## Dependencies
+
+- `package.json` has an `"overrides"` block pinning `postcss` (^8.5.10) and
+  `esbuild` (^0.28.1) — both are transitive deps (via `next` and via
+  `drizzle-kit`/`tsx`'s `@esbuild-kit/*` chain) whose bundled versions had
+  known CVEs. Keep these in sync if `npm audit` flags them again after future
+  upgrades; `npm audit` should report 0 vulnerabilities.
+
 ## Database
 
-- Connection string is in `.env.local` (gitignored)
+- Connection string is in `.env.local` (gitignored) — must be a real Neon
+  pooled connection string (from the Neon dashboard's Connection Details),
+  not the `postgresql://user:password@host/dbname?...` placeholder in
+  `.env.example`. With the placeholder, every DB-backed route 500s with an
+  empty body.
 - `VOYAGE_API_KEY` is in `.env.local` — required by `scripts/embed.ts` and `src/lib/embed.ts`
 - `ANTHROPIC_API_KEY` is in `.env.local` — required by `src/lib/rag.ts` (Chat/RAG)
 - `RESEND_API_KEY` is in `.env.local` — required by `src/lib/digest.ts` (weekly digest)
@@ -84,3 +96,8 @@ npm run embed         # generate embeddings for all highlights (idempotent)
 - **Phase 5.2** (done): Better ingestion — `POST /api/ingest` (Kindle/PDF/manual), `app/add/page.tsx`, shared `lib/ingest.ts` + `lib/embed.ts`
 - **Phase 5.3** (done): Chat/RAG — `POST /api/chat` streaming endpoint, `app/chat/page.tsx`, `lib/rag.ts` (Voyage + Claude)
 - **Phase 5.4** (done): Scheduling — `POST /api/cron/digest`, `lib/digest.ts`, `vercel.json` Monday 9 AM cron, Resend email
+- **Phase 5.5** (done): Dependency security — upgraded `next` (16.2.2→16.2.9)
+  and `@anthropic-ai/sdk` (^0.82→^0.104.1), added `postcss`/`esbuild`
+  overrides; `npm audit` now reports 0 vulnerabilities. Also hardened
+  `src/app/page.tsx` and `src/app/add/page.tsx` fetch calls to check
+  `res.ok`/handle empty bodies instead of throwing a raw JSON-parse error.

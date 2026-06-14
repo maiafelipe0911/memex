@@ -478,3 +478,89 @@ Set `AUTH_DISABLED=false` (or remove it) from `.env.local` and configure the
 Auth.js OAuth env vars — every route reverts to requiring a real session,
 `/login` shows the GitHub/Google buttons again, and `src/proxy.ts` resumes
 redirecting unauthenticated requests to `/login`.
+
+---
+
+## Fixing the "Unexpected end of JSON input" error + `npm audit` cleanup
+
+### The bug: `Failed to execute 'json' on 'Response': Unexpected end of JSON input`
+
+This happened on `/` (home) and `/add`. The cause: `/api/books` and
+`/api/highlights` were returning `HTTP 500` with an **empty response body**,
+because `.env.local`'s `DATABASE_URL` was still the placeholder copied from
+`.env.example` (`postgresql://user:password@host/dbname?sslmode=require`).
+`neon()` can't resolve the fake host `host`, the route handler throws, and
+Next.js turns that into a 500 with no body. Both pages called `res.json()`
+unconditionally, and `JSON.parse("")` throws `Unexpected end of JSON input`.
+
+**Fixes applied:**
+
+- `src/app/page.tsx` — added a `fetchJson()` helper that checks `res.ok`
+  before parsing JSON and throws a descriptive error otherwise. The initial
+  `Promise.all([...])` load now has a `.catch()` that sets a `loadError`
+  state; if set, the page renders a single error banner ("Couldn't load your
+  library. Check that `DATABASE_URL` in `.env.local` points to a real
+  database...") instead of the three-panel layout. The connections fetch in
+  `selectHighlight` also uses `fetchJson()` and resets `loadingConnections` on
+  failure via `.catch()`.
+- `src/app/add/page.tsx` — `handleSubmit` now reads the response as text
+  first (`res.text()`) and only `JSON.parse`s it if non-empty, so a 500 with
+  an empty body produces a readable `"Something went wrong (500 Internal
+  Server Error)"` message instead of a raw `SyntaxError`.
+
+These changes only make failures *readable* — the actual fix for "can't see
+books/highlights" was supplying a real Neon connection string in
+`.env.local` (the user did this separately; `/api/books` and
+`/api/highlights` now return real data).
+
+### `npm audit` cleanup (12 → 0 vulnerabilities)
+
+Ran through the audit findings individually rather than blindly running
+`npm audit fix --force` (which would have downgraded `drizzle-kit` from the
+current/latest `0.31.10` to `0.19.1`, and bumped `next` outside its exact
+pin without updating `eslint-config-next` to match):
+
+1. **`npm audit fix` (no `--force`)** — fixed `brace-expansion` (via
+   `@typescript-eslint`/eslint tooling) and `uuid` (via `resend` → `svix`)
+   through ordinary semver-compatible bumps. 12 → 7 vulnerabilities.
+
+2. **`next` 16.2.2 → 16.2.9** (and `eslint-config-next` to match) — a patch
+   bump within the same `16.2.x` line. Fixed all the Next.js DoS/XSS/cache-
+   poisoning/middleware-bypass advisories. Verified: `tsc --noEmit` clean,
+   `npm run build` succeeds, and `src/proxy.ts` still runs as middleware
+   (visible in dev server timing logs as `proxy.ts: ...µs`) with `/` → 200
+   and `/login` → 307 redirect.
+
+3. **`postcss` override** — `next@16.2.9` itself still bundles a vulnerable
+   `postcss@8.4.31` (XSS via unescaped `</style>`). Added
+   `"overrides": { "postcss": "^8.5.10" }` to `package.json` — postcss 8.x
+   is stable/compatible across these minor versions, so this is safe to force
+   for next's nested copy. 7 → 5 vulnerabilities.
+
+4. **`@anthropic-ai/sdk` `^0.82.0` → `^0.104.1`** — fixed the "insecure
+   default file permissions in local filesystem memory tool" advisory. The
+   app only uses `anthropic.messages.stream(...)` (`src/lib/rag.ts`), a
+   stable API surface across this range. `tsc --noEmit` stayed clean.
+   5 → 4 vulnerabilities.
+
+5. **`esbuild` override** — the remaining high-severity `esbuild <=0.28.0`
+   advisory appeared three times: `drizzle-kit`'s own `esbuild@0.25.12`,
+   `tsx`'s `esbuild@0.27.5`, and `@esbuild-kit/core-utils`'s
+   `esbuild@0.18.20` (a legacy transitive dep of `drizzle-kit`, declared as
+   `~0.18.20`). `npm audit fix --force`'s suggested fix — downgrading
+   `drizzle-kit` to `0.19.1` — would have been a major regression from the
+   current/latest `0.31.10`. Instead, added
+   `"overrides": { "esbuild": "^0.28.1" }` (latest patched release) to
+   `package.json`. Verified the only consumers of this chain still work:
+   `npx tsx <script>` runs fine, and `npm run db:generate` successfully loads
+   `drizzle.config.ts` via `@esbuild-kit/esm-loader` and reports "No schema
+   changes, nothing to migrate". 4 → 0 vulnerabilities.
+
+### Net result
+
+- `package.json`: `next` and `eslint-config-next` → `16.2.9`,
+  `@anthropic-ai/sdk` → `^0.104.1`, new top-level `"overrides"` block pinning
+  `postcss` and `esbuild`.
+- `npm audit` reports **0 vulnerabilities**.
+- `src/app/page.tsx` and `src/app/add/page.tsx` fail gracefully with readable
+  error messages instead of crashing on `res.json()`.
