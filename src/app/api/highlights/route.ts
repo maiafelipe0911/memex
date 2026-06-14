@@ -1,11 +1,11 @@
 import { db } from "@/lib/db";
 import { highlights, books } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { getCurrentUserId } from "@/lib/dev-auth";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -20,7 +20,7 @@ export async function GET() {
     })
     .from(highlights)
     .innerJoin(books, eq(highlights.bookId, books.id))
-    .where(eq(books.userId, session.user.id))
+    .where(eq(books.userId, userId))
     .orderBy(books.title, highlights.id);
 
   return Response.json(rows);

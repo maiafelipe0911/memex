@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { books, highlights } from "@/lib/schema";
-import { auth } from "@/lib/auth";
+import { getCurrentUserId } from "@/lib/dev-auth";
 import { and, eq } from "drizzle-orm";
 import {
   parseKindleClippings,
@@ -10,11 +10,10 @@ import {
 import { embedHighlightsByIds } from "@/lib/embed";
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const userId = session.user.id;
 
   let formData: FormData;
   try {

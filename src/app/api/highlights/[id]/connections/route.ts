@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { highlights, books } from "@/lib/schema";
 import { eq, ne, and, isNotNull, sql } from "drizzle-orm";
 import { cosineDistance } from "drizzle-orm/sql/functions/vector";
-import { auth } from "@/lib/auth";
+import { getCurrentUserId } from "@/lib/dev-auth";
 
 const TOP_K = 10;
 
@@ -10,8 +10,8 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -27,7 +27,7 @@ export async function GET(
     .select({ id: highlights.id, bookId: highlights.bookId, embedding: highlights.embedding })
     .from(highlights)
     .innerJoin(books, eq(highlights.bookId, books.id))
-    .where(and(eq(highlights.id, highlightId), eq(books.userId, session.user.id)))
+    .where(and(eq(highlights.id, highlightId), eq(books.userId, userId)))
     .limit(1);
 
   if (!source) {
@@ -61,7 +61,7 @@ export async function GET(
         and(
           isNotNull(highlights.embedding),
           ne(highlights.bookId, source.bookId),
-          eq(books.userId, session.user.id),
+          eq(books.userId, userId),
         )
       )
       .orderBy(distance)

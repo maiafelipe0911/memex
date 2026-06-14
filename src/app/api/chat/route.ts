@@ -1,10 +1,10 @@
-import { auth } from "@/lib/auth";
+import { getCurrentUserId } from "@/lib/dev-auth";
 import { findRelevantHighlights, streamChatAnswer } from "@/lib/rag";
 import type { ChatMessage } from "@/lib/rag";
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "No user message found" }, { status: 400 });
   }
 
-  const context = await findRelevantHighlights(lastUserMessage.content, session.user.id);
+  const context = await findRelevantHighlights(lastUserMessage.content, userId);
   const stream = streamChatAnswer(messages, context);
 
   return new Response(stream, {
