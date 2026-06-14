@@ -13,6 +13,14 @@ type Highlight = {
 };
 type Connection = Highlight & { similarity: number };
 
+async function fetchJson(url: string) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`${url} failed: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export default function Home() {
   const [books, setBooks] = useState<Book[]>([]);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
@@ -20,15 +28,21 @@ export default function Home() {
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [selectedHighlightId, setSelectedHighlightId] = useState<number | null>(null);
   const [loadingConnections, setLoadingConnections] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/books").then((r) => r.json()),
-      fetch("/api/highlights").then((r) => r.json()),
-    ]).then(([booksData, highlightsData]) => {
-      setBooks(booksData);
-      setHighlights(highlightsData);
-    });
+    Promise.all([fetchJson("/api/books"), fetchJson("/api/highlights")])
+      .then(([booksData, highlightsData]) => {
+        setBooks(booksData);
+        setHighlights(highlightsData);
+      })
+      .catch((err) => {
+        setLoadError(
+          "Couldn't load your library. Check that DATABASE_URL in .env.local " +
+            "points to a real database, then reload. " +
+            `(${err instanceof Error ? err.message : String(err)})`
+        );
+      });
   }, []);
 
   const bookHighlights = highlights.filter((h) => h.bookId === selectedBookId);
@@ -43,12 +57,24 @@ export default function Home() {
     setSelectedHighlightId(id);
     setConnections([]);
     setLoadingConnections(true);
-    fetch(`/api/highlights/${id}/connections`)
-      .then((r) => r.json())
+    fetchJson(`/api/highlights/${id}/connections`)
       .then((data) => {
         setConnections(data);
         setLoadingConnections(false);
+      })
+      .catch(() => {
+        setLoadingConnections(false);
       });
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-zinc-950 p-8 text-zinc-100 font-sans">
+        <p className="max-w-md rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
+          {loadError}
+        </p>
+      </div>
+    );
   }
 
   return (

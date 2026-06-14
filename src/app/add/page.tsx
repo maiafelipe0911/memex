@@ -57,9 +57,10 @@ export default function AddPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/ingest", { method: "POST", body: fd });
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : null;
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong.");
+        setError(data?.error ?? `Something went wrong (${res.status} ${res.statusText}).`);
       } else {
         setSuccess({ inserted: data.inserted, embedded: data.embedded });
         setTimeout(() => router.push("/"), 2500);
