@@ -1,7 +1,10 @@
 import { auth, signIn } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { AUTH_DISABLED } from "@/lib/dev-auth";
 
 export default async function LoginPage() {
+  if (AUTH_DISABLED) redirect("/");
+
   const session = await auth();
   if (session) redirect("/");
 
